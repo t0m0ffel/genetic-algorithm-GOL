@@ -2,12 +2,12 @@
 
 import bots.Bot1;
 import bots.Bot2;
-import bots.MuteBot;
 import bots.RandomBot;
 import de._3m5.gameoflifearena.SwingArenaView;
 import de._3m5.gameoflifearena.bots.Bot;
 import de._3m5.gameoflifearena.game.BlockBoardFactory;
 import de._3m5.gameoflifearena.game.GameController;
+import t.MuteBot;
 
 
 public class Main {
@@ -20,7 +20,7 @@ public class Main {
 
         Bot[] opponents = new Bot[]{
                 new RandomBot(),
-                new Bot2(),
+                new Bot1(),
                 new Bot2(),
         };
 
@@ -28,12 +28,15 @@ public class Main {
         for (Bot opponent : opponents) {
             GameController gc = new GameController(
                     new BlockBoardFactory(),
-                    new MuteBot(40, 83, 2, 70),
-                    opponent
+                    opponent,
+
+                    new MuteBot(100, 20, 10, 70)
             );
-            SwingArenaView view = new SwingArenaView(gc, 200);
+            gc.setDebugMode(true);
+            SwingArenaView view = new SwingArenaView(gc, 10);
             view.setVisible(true);
             view.run();
+
         }
 
 

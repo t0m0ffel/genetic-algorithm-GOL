@@ -1,4 +1,4 @@
-package bots;
+package t;
 
 import de._3m5.gameoflifearena.bots.Bot;
 import de._3m5.gameoflifearena.game.Action;
@@ -21,7 +21,7 @@ public class MuteBot implements Bot {
 
     @Override
     public String getName() {
-        return "" + Arrays.toString(params);
+        return "GenBot";
     }
 
     @Override
@@ -45,7 +45,7 @@ class Util {
 
 
     static int round = 1;
-    static Random random = new Random();
+    private static Random random = new Random();
 
     static boolean random(float p) {
         return random.nextFloat() < p;
@@ -59,8 +59,8 @@ class Util {
         return randomChoice(input, input.size());
     }
 
-
     static <T> List<T> randomChoice(List<T> input, int n) {
+
 
         List<T> out = new LinkedList<>();
         input = new LinkedList<>(input);
@@ -69,9 +69,10 @@ class Util {
             return input;
         }
 
+        Random rand = new Random();
         for (int i = 0; i < n; i++) {
             try {
-                int randomIndex = Util.random.nextInt(input.size());
+                int randomIndex = rand.nextInt(input.size());
                 T randomElement = input.get(randomIndex);
                 out.add(randomElement);
                 input.remove(randomIndex);
@@ -84,8 +85,26 @@ class Util {
         return out;
 
     }
+}
 
-    static List<Point> getFreeCells(Board board) {
+class Genetic {
+
+    private int initialPopSize;
+    private int generations;
+    private float mutationRate;
+    private int depth;
+
+    Genetic(int... params) {
+        //initialPopSize generations depth mutationRate
+        //initialPopSize generations depth
+        this.initialPopSize = params[0];
+        this.generations = params[1];
+        this.depth = params[2];
+        this.mutationRate = 1f / params[3];
+    }
+
+
+    private List<Point> getFreeCells(Board board) {
         List<Point> freeCells = new LinkedList<>();
         for (int i = 0; i < board.width(); i++) {
             for (int j = 0; j < board.height(); j++) {
@@ -99,74 +118,52 @@ class Util {
     }
 
 
-}
-
-class Genetic {
-
-    private int initialPopSize;
-    private int generations;
-    private float mutationRate;
-    private int depth;
-
-    Genetic(int... params) {
-        //initialPopSize generations depth
-        this.initialPopSize = params[0];
-        this.generations = params[1];
-        this.depth = params[2];
-        this.mutationRate = 1f / params[3];
-    }
-
-
     List<Point> run(Board board, int team) {
 
         int mostFitCount = initialPopSize / 3 + (initialPopSize / 3) % 2;
         int pointsAvailable = 5 * depth;
 
-        List<Point> freeCells = Util.getFreeCells(board);
+        List<Point> freeCells = getFreeCells(board);
 
-        if(freeCells.size()>150){
-            depth = Math.min(depth,2);
-        }
 
-        List<IChromosome> population = new LinkedList<>();
+        List<Chromosome> population = new LinkedList<>();
         for (int i = 0; i < initialPopSize; i++) {
-
-                IChromosome chromosome = new Chromosome(Util.randomChoice(freeCells, pointsAvailable));
-                population.add(chromosome);
-
+            Chromosome chromosome = new Chromosome(Util.randomChoice(freeCells, pointsAvailable), board, team);
+            population.add(chromosome);
         }
 
         int scorecount = 0;
-        float bestscore = -1000;
+        int bestscore = -1000;
         int i = 0;
-        while (i < generations) {
+        while (Thread.currentThread().isInterrupted() && i < generations) {
             //for (int i = 0; i < generations; i++) {
             i++;
             sortPop(population, board, team);
 
             population = population.subList(0, population.size() - mostFitCount);
 
-            List<IChromosome> fittest = new LinkedList<>(population.subList(0, mostFitCount));
+            List<Chromosome> fittest = new LinkedList<>(population.subList(0, mostFitCount));
 
             for (int j = 0; j < mostFitCount; j += 2) {
                 population.add(fittest.get(j).crossover(fittest.get(j + 1)));
                 population.add(fittest.get(j + 1).crossover(fittest.get(j)));
             }
-            population.forEach(c -> c.mutate(this.mutationRate, Util.getFreeCells(board)));
+            population.forEach(c -> c.mutate(this.mutationRate, getFreeCells(board)));
 
 
-            float lastscore = population.get(0).fitness(board, team);
+            float lastscore = population.get(0).fitness();
 
 
             if (lastscore > bestscore) {
                 System.out.println("new score  " + bestscore + " " + lastscore);
-                bestscore = lastscore;
+                bestscore = (int) lastscore;
                 scorecount = 0;
             } else {
                 scorecount++;
-                if (scorecount > 3) {
-                    System.err.println("scorecount " + i);
-                    break;
+                if (scorecount > 5) {
+                    if (depth > 1)
+                        System.out.println("scorecount " + i);
+                    // break;
                 }
             }
         }
@@ -177,34 +174,32 @@ class Genetic {
 
     }
 
-    private void sortPop(List<IChromosome> population, Board board, int team) {
-        population.sort((chrom1, chrom2) -> Float.compare(chrom2.fitness(board, team), chrom1.fitness(board, team)));
+    private void sortPop(List<Chromosome> population, Board board, int team) {
+
+
+        Collections.sort(population);
+
     }
 
 
 }
 
+class Chromosome implements Comparable<Chromosome> {
 
-interface IChromosome {
-    float fitness(Board board, int team);
+    private float fitnessScore;
+    private List<Point> gens;
+    private Board board;
+    private int team;
 
-    IChromosome crossover(IChromosome other);
-
-    void mutate(float mutateProb, List<Point> freeCells);
-
-    List<Point> getGens();
-}
-
-class Chromosome implements IChromosome {
-
-    List<Point> gens;
-
-    Chromosome(List<Point> gens) {
+    Chromosome(List<Point> gens, Board board, int team) {
         this.gens = gens;
+        this.board = board;
+        this.team = team;
+        fitnessScore = _fitness();
     }
 
 
-    public float fitness(Board board, int team) {
+    private float _fitness() {
 
         board = board.getCopy();
 
@@ -213,6 +208,7 @@ class Chromosome implements IChromosome {
         float totalScore = 0;
         for (int i = 0; i < actions.size(); i += 5) {
             board.calcTurn(actions.subList(i, 5 + i));
+
             int[] cells = board.countCells();
             totalScore += (team == 0 ? cells[0] - cells[1] : cells[1] - cells[0]) / ((i / 5) + 1);
         }
@@ -221,33 +217,33 @@ class Chromosome implements IChromosome {
     }
 
 
-    public IChromosome crossover(IChromosome other) {
-        List<Point> newGens = new LinkedList<>();
-        for (int i = 0; i < gens.size(); i++) {
-            newGens.add(i < gens.size() / 2 ? gens.get(i) : other.getGens().get(i));
-        }
+    public float fitness() {
+        return fitnessScore;
+    }
 
-        return new Chromosome(newGens);
+    public Chromosome crossover(Chromosome other) {
+        List<Point> newGens = new LinkedList<>(gens.subList(0, 3));
+        newGens.addAll(other.getGens().subList(3, other.getGens().size()));
+        return new Chromosome(newGens, this.board, this.team);
     }
 
 
     public void mutate(float mutateProb, List<Point> freeCells) {
         if (Util.random(mutateProb)) {
             Random random = new Random();
-            int pos1 = random.nextInt(gens.size() - 1);
-            int pos2 = random.nextInt(gens.size() - 1);
-
+            int pos1 = random.nextInt(4);
             gens.set(pos1, freeCells.get(random.nextInt(freeCells.size() - 1)));
-
-
-            //Collections.swap(gens, pos1, pos2);
+            fitnessScore = _fitness();
         }
-
     }
-
 
     public List<Point> getGens() {
         return gens;
     }
 
+    @Override
+    public int compareTo(Chromosome o) {
+        return (int) (o.fitnessScore - fitnessScore);
+    }
 }
+
